@@ -1,8 +1,13 @@
+#include <string>
+#include <vector>
 
-/* allocates memory for filenames using malloc, free should be called for each filename
- * and for ptr to filenames */
-int getFilesList(const char* cpioArchivePath, char*** out_filenames, int* out_numFiles);
+using namespace std;
 
-int unpackFile(const char* cpioArchivePath, const char* filename);
+/*throws CpioException*/
+vector<string> getFilesList(const string& cpioArchivePath);
 
-int archivateFile(const char* fileToArchivate,);
+/*throws CpioException*/
+void unpackFile(const string& cpioArchivePath, const string& filename);
+
+/*throws CpioException*/
+void archivateFile(const string& fileToArchivate, const string& pathToNewarchive);
