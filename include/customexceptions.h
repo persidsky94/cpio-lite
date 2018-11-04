@@ -1,14 +1,14 @@
 #include <stdexcept>
 
-class CpioException : public std::runtime_exception {
+class CpioException : public std::runtime_error {
 	public:
 		enum ErrorType 
 		{
 			InvalidInputArchive,
-		}
+		};
 
 		CpioException(ErrorType errType, const string& description) 
-			: std::runtime_exception(description) 
+			: std::runtime_error(description) 
 		{
 			m_errType = errType;
 		}
@@ -22,13 +22,13 @@ class CpioException : public std::runtime_exception {
 		ErrorType m_errType;
 };
 
-class PosixException : public std::runtime_exception {
+class PosixException : public std::runtime_error {
 	
 	using errType = int;
 	
 	public:
 		PosixException(errType errorCode, const string& description) 
-			: std::runtime_exception(description) 
+			: std::runtime_error(description) 
 		{
 			m_errorCode = errorCode;
 		}
