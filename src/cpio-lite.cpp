@@ -7,6 +7,7 @@
 #include <unistd.h>
 
 #include <iostream>
+#include <memory>
 #include <string>
 #include <vector>
 
@@ -56,23 +57,14 @@ vector<string> getFilesList(const string& cpioArchivePath)
 		
 		auto filenameSize = getFilenameSizeFromBigEndianHeader(header);
 		auto realFilenameSize = filenameSize + filenameSize%2;
-		char* cFilename = (char*)malloc(realFilenameSize);
-		try 
-		{
-			sz = fd.readTo(cFilename, realFilenameSize);
-			string filename(cFilename);
-			if (filename == "TRAILER!!!")
-				break;
-			else
-				filenames.push_back(filename);
+		auto cFilename = make_unique<char[]>(realFilenameSize);
 
-		}
-		catch (exception& e) 
-		{
-			free(cFilename);
-			throw;
-		}
-		free(cFilename);
+		sz = fd.readTo(cFilename.get(), realFilenameSize);
+		string filename(cFilename.get());
+		if (filename == "TRAILER!!!")
+			break;
+		else
+			filenames.push_back(filename);
 
 		auto bytesToSkip = getFileSizeFromBigEndianHeader(header);
 		auto realBytesToSkip = bytesToSkip + bytesToSkip%2;
@@ -101,26 +93,18 @@ void unpackFile(const string& cpioArchivePath, const string& filename)
 
 		auto filenameSize = getFilenameSizeFromBigEndianHeader(header);
 		auto realFilenameSize = filenameSize + filenameSize%2;
-		char* cFilename = (char*)malloc(realFilenameSize);
-		try 
-		{
-			sz = fd.readTo(cFilename, realFilenameSize);
-			string filename(cFilename);
-			if (filename == "TRAILER!!!") {
-				break;
-			}
-			else if (filename == filename) {
-				
-				// TODO: unpack file (hard, eh?)
-			}
+		auto cFilename = make_unique<char[]>(realFilenameSize);
 
+		sz = fd.readTo(cFilename.get(), realFilenameSize);
+		string filename(cFilename.get());
+		if (filename == "TRAILER!!!") {
+			break;
 		}
-		catch (exception& e) 
-		{
-			free(cFilename);
-			throw;
+		else if (filename == filename) {
+			
+			// TODO: unpack file (hard, eh?)
 		}
-		free(cFilename);
+
 	}
 
 	return;
@@ -142,7 +126,6 @@ void archivateFiles(const vector<string>& filesToArchivate, const string& pathTo
 
 	try
 	{
-		// write all files
 		for (const auto& filename: filesToArchivate) {
 			PosixWrapper::lstat_(filename, st);
 			fillInHeader(header, st, filename);
@@ -164,42 +147,30 @@ void archivateFiles(const vector<string>& filesToArchivate, const string& pathTo
 		    	}
 		    	case S_IFLNK:
 		    	{
-		    		char* buf = (char*)malloc(st.st_size);
-		    		try {
-		    			auto size = PosixWrapper::readlink_(filename, buf, st.st_size);
-		    			fdArch.writeFrom(buf, size);
-		    			if (size % 2 == 1)
-		    				fdArch.writeFrom(&additionalNullTerminator, 1);
-		    		}
-		    		catch (exception& e) {
-		    			free(buf);
-		    			throw;
-		    		}
-		    		free(buf);
+		    		auto bufPtr = make_unique<char[]>(st.st_size);
+		    		
+	    			auto size = PosixWrapper::readlink_(filename, bufPtr.get(), st.st_size);
+	    			fdArch.writeFrom(bufPtr.get(), size);
+	    			if (size % 2 == 1)
+	    				fdArch.writeFrom(&additionalNullTerminator, 1);
+		    		
 		    		break;
 		    	}
 		    	case S_IFREG:
 		    	{
 					auto fdToArchivate = DescriptorWrapper::openFile(filename, O_RDONLY); 
 					auto leftToCopy = st.st_size;
-					void* buf = (void*)malloc(BUFFER_BLOCK);
-					try 
+					auto bufPtr = make_unique<char[]>(BUFFER_BLOCK);
+				
+					while (leftToCopy > 0)
 					{
-						while (leftToCopy > 0)
-						{
-							auto sz = fdToArchivate.readTo(buf, BUFFER_BLOCK);
-							fdArch.writeFrom(buf, sz);
-							leftToCopy -= sz;
-						}
-						if (st.st_size % 2 == 1)
-							fdArch.writeFrom(&additionalNullTerminator, 1);
+						auto sz = fdToArchivate.readTo(bufPtr.get(), BUFFER_BLOCK);
+						fdArch.writeFrom(bufPtr.get(), sz);
+						leftToCopy -= sz;
 					}
-					catch (exception& e) 
-					{
-						free(buf);
-						throw;
-					}
-					free(buf);
+					if (st.st_size % 2 == 1)
+						fdArch.writeFrom(&additionalNullTerminator, 1);
+					
 					break;
 				}
 				default:
