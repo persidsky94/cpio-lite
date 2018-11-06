@@ -1,4 +1,5 @@
 cmake_minimum_required(VERSION 2.8)
 project(cpio-lite)
-add_library(cpio-lite SHARED src/cpio-lite.cpp src/descriptorwrapper.cpp src/util.cpp)
+add_subdirectory(samples)
 include_directories(include)
+add_library(cpio-lite SHARED src/cpio-lite.cpp src/descriptorwrapper.cpp src/util.cpp src/posixwrapper.cpp)

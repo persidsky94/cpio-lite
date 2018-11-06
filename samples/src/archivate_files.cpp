@@ -4,8 +4,8 @@
 
 #include <dlfcn.h>
 
-#include "../include/cpio-lite.h"
-#include "../include/customexceptions.h"
+#include "cpio-lite.h"
+#include "customexceptions.h"
 
 using namespace std;
 
@@ -21,8 +21,10 @@ int main()
 		cout << "Failed to find symbol 'archivateFiles': " << dlerror() << endl;
 		return -1;
 	}
-	vector<string> filesToArchivate {"one", "two", "three"};
-	string newArchiveName("onetwothree.cpio");
+
+	vector<string> filesToArchivate {"./testfiles/onetwothree/one", "./testfiles/onetwothree/two", "./testfiles/onetwothree/three"};
+	string newArchiveName("./testfiles/cpio_archives/onetwothree.cpio");
+	
 	try 
 	{
 		archivateFilesFunc(filesToArchivate, newArchiveName);

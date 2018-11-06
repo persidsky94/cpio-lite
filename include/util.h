@@ -12,6 +12,8 @@
 
 using namespace std;
 
+constexpr size_t BUFFER_BLOCK=512;
+
 bool isHeaderLittleEndian(const header_old_cpio& header);
 
 void swapBytes(unsigned short& twoByteValue);

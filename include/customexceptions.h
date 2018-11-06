@@ -11,6 +11,8 @@ class CpioException : public std::runtime_error {
 		{
 			InvalidInputArchive,
 			InvalidInputFileToArchive,
+			FileNotFoundInArchive,
+			UnsupportedDeviceType,
 		};
 
 		CpioException(ErrorType errType, const string& description) 

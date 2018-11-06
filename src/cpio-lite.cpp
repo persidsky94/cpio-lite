@@ -15,29 +15,10 @@
 #include "cpio-lite.h"
 #include "customexceptions.h"
 #include "descriptorwrapper.h"
+#include "posixwrapper.h"
 #include "util.h"
 
 using namespace std;
-
-
-class PosixWrapper {
-public:	
-	static int lstat_(const string& filename, struct stat& st)
-	{
-		auto res = lstat(filename.c_str(), &st);
-		if (res == -1)
-			throw PosixException(errno, "Error while lstat");
-		return res;
-	}
-
-	static ssize_t readlink_(const string& filename, char* buf, size_t bufSize)
-	{
-		auto res = readlink(filename.c_str(), buf, bufSize);
-		if (res == -1)
-			throw PosixException(errno, "Error while readlink");
-		return res;
-	}
-};
 
 
 vector<string> getFilesList(const string& cpioArchivePath) 
@@ -75,6 +56,95 @@ vector<string> getFilesList(const string& cpioArchivePath)
 }
 
 
+void set_stat(header_old_cpio &header, const string& filename) 
+{
+	PosixWrapper::lchown_(filename, header.c_uid, header.c_gid);
+    PosixWrapper::chmod_(filename, header.c_mode);
+}
+
+
+void unpackFileInternal(header_old_cpio& header, DescriptorWrapper& fd, const string& filename)
+{
+	switch(header.c_mode & CP_IFMT) {
+		case S_IFCHR:
+    	case S_IFBLK:
+    	case S_IFSOCK:
+    	case S_IFIFO:
+    	{
+    		throw CpioException(CpioException::UnsupportedDeviceType, "Cannot unpack device file");
+    		break;
+    	}
+		case S_IFDIR:
+    	{
+    		PosixWrapper::mkdir_(filename, header.c_mode);
+
+    		try
+    		{
+    			set_stat(header, filename);
+    		}
+    		catch (exception& e)
+    		{
+    			rmdir(filename.c_str());
+    			throw;
+    		}
+
+    		break;
+    	}
+    	case S_IFLNK:
+    	{
+    		auto pointedFilenameSize = getFileSizeFromBigEndianHeader(header);
+    		auto cPointedFilename = make_unique<char[]>(pointedFilenameSize);
+    		fd.readTo(cPointedFilename.get(), pointedFilenameSize);
+    		/* symlink body in cpio archive may not have null-terminator, so use   
+    		 * string constructor from buffer with size */
+    		string pointedFilename(cPointedFilename.get(), pointedFilenameSize);
+    		PosixWrapper::symlink_(pointedFilename, filename);
+
+    		try
+    		{
+    			PosixWrapper::lchown_(filename, header.c_uid, header.c_gid);
+    		}
+    		catch (exception& e)
+    		{
+    			unlink(filename.c_str());
+    			throw;
+    		}
+
+    		break;
+    	}
+    	case S_IFREG:
+    	{
+			auto fileContentSize = getFileSizeFromBigEndianHeader(header);
+			auto unpackedFd = DescriptorWrapper::createFile(filename, O_WRONLY | O_CREAT, ACCESS_RW_RW_R__);
+
+			try
+			{
+				auto leftToCopy = fileContentSize;
+				auto bufPtr = make_unique<char[]>(BUFFER_BLOCK);
+				while (leftToCopy > 0)
+				{
+					auto sz = fd.readTo(bufPtr.get(), min(BUFFER_BLOCK, leftToCopy));
+					unpackedFd.writeFrom(bufPtr.get(), sz);
+					leftToCopy -= sz;
+				}
+
+				set_stat(header, filename);
+			}
+			catch (exception& e)
+    		{
+    			unlink(filename.c_str());
+    			throw;
+    		}
+
+			break;
+		}
+		default:
+		{
+			throw CpioException(CpioException::InvalidInputFileToArchive, "Unknown filetype");
+		}
+	}
+}
+
 
 void unpackFile(const string& cpioArchivePath, const string& filename) 
 {
@@ -96,30 +166,33 @@ void unpackFile(const string& cpioArchivePath, const string& filename)
 		auto cFilename = make_unique<char[]>(realFilenameSize);
 
 		sz = fd.readTo(cFilename.get(), realFilenameSize);
-		string filename(cFilename.get());
-		if (filename == "TRAILER!!!") {
+		string filenameFromArchive(cFilename.get());
+		if (filenameFromArchive == "TRAILER!!!") {
 			break;
 		}
-		else if (filename == filename) {
-			
-			// TODO: unpack file (hard, eh?)
+		else if (filenameFromArchive == filename) {
+			unpackFileInternal(header, fd, filenameFromArchive);
+			return;
 		}
 
+		auto bytesToSkip = getFileSizeFromBigEndianHeader(header);
+		auto realBytesToSkip = bytesToSkip + bytesToSkip%2;
+		fd.seek((off_t)realBytesToSkip, SEEK_CUR);
 	}
 
+	throw CpioException(CpioException::FileNotFoundInArchive, "Couldn't find specified file in archive");
 	return;
 }
 
 
-void archivateFiles(const vector<string>& filesToArchivate, const string& pathToNewarchive) 
+void archivateFiles(const vector<string>& filesToArchivate, const string& pathToOutArchive) 
 {
-	constexpr size_t BUFFER_BLOCK=512;
 	// check all files can be opened
 	for (const auto& filename: filesToArchivate) {
 		DescriptorWrapper fd = DescriptorWrapper::openFile(filename, O_RDONLY);
 	}
 
-	auto fdArch = DescriptorWrapper::createFile(pathToNewarchive, O_WRONLY | O_CREAT, ACCESS_RW_RW_R__);
+	auto fdArch = DescriptorWrapper::createFile(pathToOutArchive, O_WRONLY | O_CREAT, ACCESS_RW_RW_R__);
 	header_old_cpio header;
 	char additionalNullTerminator = 0;
 	struct stat st;
@@ -148,7 +221,6 @@ void archivateFiles(const vector<string>& filesToArchivate, const string& pathTo
 		    	case S_IFLNK:
 		    	{
 		    		auto bufPtr = make_unique<char[]>(st.st_size);
-		    		
 	    			auto size = PosixWrapper::readlink_(filename, bufPtr.get(), st.st_size);
 	    			fdArch.writeFrom(bufPtr.get(), size);
 	    			if (size % 2 == 1)
@@ -161,10 +233,9 @@ void archivateFiles(const vector<string>& filesToArchivate, const string& pathTo
 					auto fdToArchivate = DescriptorWrapper::openFile(filename, O_RDONLY); 
 					auto leftToCopy = st.st_size;
 					auto bufPtr = make_unique<char[]>(BUFFER_BLOCK);
-				
 					while (leftToCopy > 0)
 					{
-						auto sz = fdToArchivate.readTo(bufPtr.get(), BUFFER_BLOCK);
+						auto sz = fdToArchivate.readTo(bufPtr.get(), min<unsigned long>(BUFFER_BLOCK, leftToCopy));
 						fdArch.writeFrom(bufPtr.get(), sz);
 						leftToCopy -= sz;
 					}
@@ -184,7 +255,7 @@ void archivateFiles(const vector<string>& filesToArchivate, const string& pathTo
 	}
 	catch (exception& e) 
 	{
-		unlink(pathToNewarchive.c_str());
+		unlink(pathToOutArchive.c_str());
 		throw;
 	}
 

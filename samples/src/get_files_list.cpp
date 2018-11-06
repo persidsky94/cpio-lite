@@ -4,10 +4,18 @@
 
 #include <dlfcn.h>
 
-#include "../include/cpio-lite.h"
-#include "../include/customexceptions.h"
+#include "cpio-lite.h"
+#include "customexceptions.h"
 
 using namespace std;
+
+void getAndPrintFilesList(decltype(&getFilesList) getFilesListFunc, const string& archivePath)
+{
+	auto filenames = getFilesListFunc(archivePath);
+	cout << "Archive " << archivePath << " contains files:" << endl;
+	for (const auto& filename : filenames)
+		cout << "	" << filename << endl;
+}
 
 int main() 
 {
@@ -21,13 +29,14 @@ int main()
 		cout << "Failed to find symbol 'getFilesList': " << dlerror() << endl;
 		return -1;
 	}
-	
+
+	vector<string> archivePaths{"./testfiles/cpio_archives/directory.cpio", "./testfiles/cpio_archives/onetwothree.cpio", "./testfiles/cpio_archives/links_dirs_regs.cpio"};	
+
 	try
 	{
-		auto filenames = getFilesListFunc("./directory.cpio");
+		for (const auto& archivePath : archivePaths)
+			getAndPrintFilesList(getFilesListFunc, archivePath);
 		
-		for (const auto& filename : filenames)
-			cout << filename << endl;
 	}
 	catch (CpioException& e)
 	{
