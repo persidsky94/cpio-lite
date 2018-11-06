@@ -1,10 +1,16 @@
+#ifndef CUSTOMEXCEPTIONS_H
+#define CUSTOMEXCEPTIONS_H
+
 #include <stdexcept>
+
+using namespace std;
 
 class CpioException : public std::runtime_error {
 	public:
 		enum ErrorType 
 		{
 			InvalidInputArchive,
+			InvalidInputFileToArchive,
 		};
 
 		CpioException(ErrorType errType, const string& description) 
@@ -41,3 +47,5 @@ class PosixException : public std::runtime_error {
 	protected:
 		errType m_errorCode;
 };
+
+#endif //CUSTOMEXCEPTIONS_H
