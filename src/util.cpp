@@ -40,7 +40,7 @@ void switchEndianness(header_old_cpio& header)
 
 size_t getFileSizeFromBigEndianHeader(const header_old_cpio& header) 
 {
-	return (((size_t)header.c_filesize[0])<<(sizeof(unsigned short)*CHAR_BIT)) + (size_t)header.c_filesize[1];
+	return (((size_t)header.c_filesize[0])<<(sizeof(unsigned short)*8)) + (size_t)header.c_filesize[1];
 }
 
 size_t getFilenameSizeFromBigEndianHeader(const header_old_cpio& header)
@@ -92,7 +92,7 @@ void fillInHeader(header_old_cpio& header, struct stat& st, const string& filena
 	header.c_gid = (unsigned short) st.st_gid;
 	header.c_nlink = (unsigned short) st.st_nlink;
 	header.c_rdev = (unsigned short) st.st_rdev;
-	header.c_mtime[0] = (unsigned short) (st.st_mtime >> sizeof(unsigned short)*CHAR_BIT);
+	header.c_mtime[0] = (unsigned short) (st.st_mtime >> sizeof(unsigned short)*8);
 	header.c_mtime[1] = (unsigned short) (st.st_mtime);
 	header.c_namesize = (unsigned short) (filename.length() + 1);
 	switch (header.c_mode & CP_IFMT) {
@@ -106,7 +106,7 @@ void fillInHeader(header_old_cpio& header, struct stat& st, const string& filena
 	    	break;
 	    case S_IFLNK:
 	    case S_IFREG:
-			header.c_filesize[0] = (unsigned short) (st.st_size >> sizeof(unsigned short)*CHAR_BIT); // for filesizes <= 2Gb
+			header.c_filesize[0] = (unsigned short) (st.st_size >> sizeof(unsigned short)*8); // for filesizes <= 2Gb
 			header.c_filesize[1] = (unsigned short) (st.st_size);
 			break;
 		default:

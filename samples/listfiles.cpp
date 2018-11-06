@@ -5,6 +5,7 @@
 #include <dlfcn.h>
 
 #include "../include/cpio-lite.h"
+#include "../include/customexceptions.h"
 
 using namespace std;
 
@@ -12,18 +13,31 @@ int main()
 {
 	void* handle = dlopen("../libcpio-lite.so", RTLD_NOW);
 	if (handle == nullptr) {
-		cout << "Failed to load cpio-lite.so" << endl;
+		cout << "Failed to load cpio-lite.so: " << dlerror() << endl;		
 		return -1;
 	}
-	vector<string> (*listFilesFunc) (const string&) = (vector<string> (*) (const string&)) dlsym(handle, "_Z12getFilesListRKNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEEE");
-	if (listFilesFunc == nullptr) {
+	auto getFilesListFunc = (decltype(&getFilesList)) dlsym(handle, "getFilesList");
+	if (getFilesListFunc == nullptr) {
 		cout << "Failed to find symbol 'getFilesList': " << dlerror() << endl;
 		return -1;
 	}
-	auto filenames = listFilesFunc("/home/pers/code/getmobit/cpio-lite/samples/directory.cpio");
-	for (const auto& filename : filenames)
+	
+	try
 	{
-		cout << filename << endl;
+		auto filenames = getFilesListFunc("./directory.cpio");
+		
+		for (const auto& filename : filenames)
+			cout << filename << endl;
+	}
+	catch (CpioException& e)
+	{
+		cout << e.what() << ", error type: " << e.errorType() << endl;
+		return -1;
+	}
+	catch (PosixException& e)
+	{
+		cout << e.what() << ", error code: " << e.errorCode() << endl;
+		return -1;
 	}
 }
 
